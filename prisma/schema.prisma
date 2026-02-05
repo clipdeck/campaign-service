@@ -1,0 +1,315 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// Campaign Domain Models
+// ============================================================================
+
+model Campaign {
+  id                      String             @id @default(uuid())
+  title                   String
+  description             String
+  category                String
+  image                   String?
+
+  // Creator (reference to User service — no relation)
+  createdBy               String
+
+  // Dates
+  startDate               DateTime
+  endDate                 DateTime
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  archivedAt              DateTime?
+  lastStatsRefreshedAt    DateTime?
+
+  // Content Configuration
+  platforms               Platform[]         @default([])
+  tags                    String[]           @default([])
+  hashtags                String[]           @default([])
+  languages               String[]           @default([])
+  clipDuration            String             @default("10s")
+  minResolution           String             @default("1080p")
+  orientation             String?
+  geoRestrictions         String?
+  requirements            String?
+  resources               String[]           @default([])
+  countryOrigin           String?
+
+  // Payment Configuration
+  paymentType             PaymentType        @default(CLIP)
+  paymentMethod           String             @default("Transferencia")
+  basePay                 Int                @default(0)
+  rewardPerView           Int?               @default(0)
+  totalBudget             Int                @default(0)
+  maxPay                  Int?               @default(0)
+  currency                String             @default("USD")
+  approvalTime            String?            @default("48h")
+
+  // Limits & Constraints
+  limitPerEditor          Int?               @default(0)
+  limitPerClip            Int?               @default(0)
+  limitClipsPerClipper    Int?               @default(0)
+  minViewCount            Int?               @default(0)
+  editorSlots             Int                @default(5)
+
+  // Status & Publishing
+  published               Boolean            @default(true)
+  status                  CampaignStatus     @default(ACTIVE)
+
+  // Submission Stats (denormalized, updated via events from Clip Service)
+  approvedClips           Int                @default(0)
+  pendingClips            Int                @default(0)
+  rejectedClips           Int                @default(0)
+
+  // Performance Stats (denormalized, updated via events from Stats Service)
+  totalViews              Int                @default(0)
+  viewsLast24h            Int                @default(0)
+  remainingBudget         Int                @default(0)
+  spentBudget             Int                @default(0)
+
+  // Campaign Type
+  campaignType            CampaignType       @default(AUTO_JOIN)
+
+  // Leaderboard
+  enableLeaderboard       Boolean            @default(false)
+  leaderboardMetric       LeaderboardMetric? @default(VIEWS)
+  leaderboardName         String?
+  leaderboardPrizePool    Int?               @default(0)
+
+  // Notifications
+  notifyOnApproval        Boolean            @default(true)
+  notifyOnSubmission      Boolean            @default(true)
+
+  // Discord Integration (channel IDs stored here, managed via Discord Service)
+  discordChannelId        String?
+  discordPrivateChannelId String?
+  creatorRoleId           String?
+  adminRoleId             String?
+
+  // Privacy
+  isPrivate               Boolean            @default(false)
+  areClipsPublic          Boolean            @default(true)
+  showParticipantCount    Boolean            @default(true)
+
+  // Financial
+  isFunded                Boolean            @default(false)
+  platformFee             Int                @default(0)
+  paymentCap              Int?               @default(0)
+  paymentCapMetric        LeaderboardMetric? @default(VIEWS)
+
+  // Crypto/Wallet
+  walletAddress           String?
+  walletId                String?
+  txHash                  String?
+  walletData              String?
+
+  // Studio (reference — no relation)
+  studioId                String?
+
+  // Relations (within this service)
+  participants            CampaignParticipant[]
+  applications            CampaignApplication[]
+  invites                 CampaignInvite[]
+  permissions             CampaignPermissions?
+  leaderboardEntries      LeaderboardEntry[]
+  prizeDistributions      PrizeDistribution[]
+  waitlistQuestions        WaitlistQuestion[]
+  waitlistResponses        WaitlistResponse[]
+  waitlistBans             WaitlistBan[]
+
+  @@index([createdBy])
+  @@index([status])
+  @@index([studioId])
+}
+
+model CampaignParticipant {
+  id         String          @id @default(uuid())
+  campaignId String
+  userId     String
+  role       ParticipantRole @default(MEMBER)
+  status     InviteStatus    @default(ACCEPTED)
+  campaign   Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId])
+  @@index([userId, role])
+}
+
+model CampaignPermissions {
+  id                      String   @id @default(uuid())
+  campaignId              String   @unique
+  adminsCanReviewClips    Boolean  @default(true)
+  adminsCanManageTeam     Boolean  @default(true)
+  adminsCanEditCampaign   Boolean  @default(false)
+  adminsCanAddBudget      Boolean  @default(false)
+  adminsCanDeleteCampaign Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  campaign                Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model CampaignApplication {
+  id         String            @id @default(uuid())
+  campaignId String
+  userId     String
+  status     ApplicationStatus @default(PENDING)
+  createdAt  DateTime          @default(now())
+  decidedAt  DateTime?
+  campaign   Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId, status])
+}
+
+model CampaignInvite {
+  id            String          @id @default(cuid())
+  campaignId    String
+  discordUserId String
+  status        InviteStatus    @default(PENDING)
+  createdAt     DateTime        @default(now())
+  role          ParticipantRole @default(MEMBER)
+  campaign      Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, discordUserId])
+}
+
+model LeaderboardEntry {
+  id           String   @id @default(uuid())
+  campaignId   String
+  editorId     String
+  submissionId String   @unique
+  views        Int      @default(0)
+  likes        Int      @default(0)
+  engagement   Float    @default(0)
+  score        Float    @default(0)
+  rank         Int?
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, score])
+  @@index([editorId, campaignId])
+}
+
+model PrizeDistribution {
+  id         String   @id @default(uuid())
+  campaignId String
+  position   Int
+  reward     Int
+  label      String
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, position])
+  @@index([campaignId])
+}
+
+model WaitlistQuestion {
+  id         String   @id @default(uuid())
+  campaignId String
+  question   String
+  order      Int      @default(1)
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model WaitlistResponse {
+  id         String         @id @default(uuid())
+  campaignId String
+  userId     String
+  answers    Json
+  status     WaitlistStatus @default(PENDING)
+  reviewedBy String?
+  reviewedAt DateTime?
+  note       String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  campaign   Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+}
+
+model WaitlistBan {
+  id         String   @id @default(uuid())
+  campaignId String
+  userId     String
+  reason     String?
+  createdAt  DateTime @default(now())
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum PaymentType {
+  CLIP
+  VIEWS
+  BASE_PLUS_VIEWS
+  TWEET
+  TWEET_ENGAGEMENT
+}
+
+enum CampaignType {
+  WAITLIST
+  AUTO_JOIN
+}
+
+enum CampaignStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+  CANCELLED
+}
+
+enum WaitlistStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  BANNED
+}
+
+enum ParticipantRole {
+  CREATOR
+  ADMIN
+  MEMBER
+  PENDING
+  NONE
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  AUTO_ACCEPTED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum LeaderboardMetric {
+  VIEWS
+  LIKES
+  ENGAGEMENT
+}
+
+enum Platform {
+  TIKTOK
+  INSTAGRAM
+  YOUTUBE
+  TWITTER
+}
