@@ -129,6 +129,9 @@ model Campaign {
   @@index([createdBy])
   @@index([status])
   @@index([studioId])
+  @@index([createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([endDate])
 }
 
 model CampaignParticipant {
@@ -180,6 +183,8 @@ model CampaignInvite {
   campaign      Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, discordUserId])
+  @@index([campaignId])
+  @@index([campaignId, status])
 }
 
 model LeaderboardEntry {
@@ -220,6 +225,8 @@ model WaitlistQuestion {
   order      Int      @default(1)
   createdAt  DateTime @default(now())
   campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
 }
 
 model WaitlistResponse {
@@ -236,6 +243,7 @@ model WaitlistResponse {
   campaign   Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, userId])
+  @@index([campaignId, status])
 }
 
 model WaitlistBan {
@@ -247,6 +255,7 @@ model WaitlistBan {
   campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, userId])
+  @@index([campaignId])
 }
 
 // ============================================================================
