@@ -7,11 +7,12 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   DATABASE_URL: z.string().url(),
+  DIRECT_URL: z.string().url().optional(),
 
   RABBITMQ_URL: z.string().optional(),
   EVENT_EXCHANGE: z.string().default('clipdeck.events'),
 
-  JWT_SECRET: z.string().min(16),
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
 
   DISCORD_SERVICE_URL: z.string().url().optional(),
   NOTIFICATION_SERVICE_URL: z.string().url().optional(),
