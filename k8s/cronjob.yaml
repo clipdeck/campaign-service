@@ -1,0 +1,120 @@
+# ============================================================================
+# Campaign Service — CronJobs
+#
+# campaign-auto-close : runs every 15 minutes, ends campaigns past their endDate
+# stats-update        : runs every 10 minutes, refreshes leaderboard rankings
+# ============================================================================
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: campaign-auto-close
+  namespace: clipdeck
+  labels:
+    app.kubernetes.io/name: campaign-auto-close
+    app.kubernetes.io/component: cronjob
+    app.kubernetes.io/part-of: clipdeck
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: campaign-auto-close
+            app.kubernetes.io/component: cronjob
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: registry-clipdeck
+          containers:
+            - name: campaign-auto-close
+              image: registry.digitalocean.com/clipdeck/campaign-service:fix-cronjob
+              imagePullPolicy: Always
+              command: ["node", "dist/jobs/autoClose.js"]
+              env:
+                - name: NODE_ENV
+                  value: "production"
+                - name: LOG_LEVEL
+                  value: "info"
+                - name: EVENT_EXCHANGE
+                  value: "clipdeck.events"
+              envFrom:
+                - configMapRef:
+                    name: clipdeck-config
+                - secretRef:
+                    name: clipdeck-db-campaign
+                - secretRef:
+                    name: clipdeck-jwt
+                - secretRef:
+                    name: clipdeck-rabbitmq
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "200m"
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: stats-update
+  namespace: clipdeck
+  labels:
+    app.kubernetes.io/name: stats-update
+    app.kubernetes.io/component: cronjob
+    app.kubernetes.io/part-of: clipdeck
+spec:
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 180
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: stats-update
+            app.kubernetes.io/component: cronjob
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: registry-clipdeck
+          containers:
+            - name: stats-update
+              image: registry.digitalocean.com/clipdeck/campaign-service:fix-cronjob
+              imagePullPolicy: Always
+              command: ["node", "dist/jobs/statsUpdate.js"]
+              env:
+                - name: NODE_ENV
+                  value: "production"
+                - name: LOG_LEVEL
+                  value: "info"
+                - name: EVENT_EXCHANGE
+                  value: "clipdeck.events"
+              envFrom:
+                - configMapRef:
+                    name: clipdeck-config
+                - secretRef:
+                    name: clipdeck-db-campaign
+                - secretRef:
+                    name: clipdeck-jwt
+                - secretRef:
+                    name: clipdeck-rabbitmq
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "200m"
