@@ -13,7 +13,7 @@ import { publisher } from './lib/events';
 
 async function main() {
   const app = Fastify({
-    logger: logger as any,
+    loggerInstance: logger,
   });
 
   // Plugins
