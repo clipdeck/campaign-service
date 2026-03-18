@@ -12,13 +12,13 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Copy shared packages so file: references resolve during npm ci
 COPY shared-types/ /shared-types/
 COPY shared-events/ /shared-events/
 
 COPY service/package*.json ./
 COPY service/prisma ./prisma/
 
+RUN cd /shared-events && npm install --production --ignore-scripts 2>&1 | tail -3
 RUN npm ci --omit=dev && npx prisma generate
 
 # Stage 2: Build
@@ -32,6 +32,8 @@ COPY service/package*.json ./
 COPY service/tsconfig.json ./
 COPY service/prisma ./prisma/
 
+ENV PRISMA_CLI_BINARY_TARGETS="linux-musl-openssl-3.0.x"
+RUN cd /shared-events && npm install --production --ignore-scripts 2>&1 | tail -3
 RUN npm ci
 RUN npx prisma generate
 
@@ -43,12 +45,16 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node
 
 # Add non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 campaign
 
+COPY --from=deps /shared-types/ /shared-types/
+COPY --from=deps /shared-events/ /shared-events/
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./
@@ -60,4 +66,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["node", "dist/index.js"]
